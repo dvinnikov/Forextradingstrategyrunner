@@ -6,38 +6,50 @@ import { CurrentSignal } from "./CurrentSignal";
 import { PredictionPanel } from "./PredictionPanel";
 import { Card } from "./ui/card";
 import { generateSignal, updatePriceData, STRATEGIES } from "../utils/tradingLogic";
-import type { Signal, PricePoint, Strategy } from "../types/trading";
+import { fetchLatestPrice } from "../utils/forexApi";
+import type { Signal, PricePoint } from "../types/trading";
 
 export function ForexStrategyRunner() {
   const [selectedStrategies, setSelectedStrategies] = useState<string[]>(["EMA_CROSSOVER"]);
   const [signals, setSignals] = useState<Signal[]>([]);
   const [currentSignal, setCurrentSignal] = useState<Signal | null>(null);
   const [priceData, setPriceData] = useState<PricePoint[]>([]);
-  const [currentPrice, setCurrentPrice] = useState(1.0850);
+  const [currentPrice, setCurrentPrice] = useState<number | null>(null);
   const [prediction, setPrediction] = useState<"BULLISH" | "BEARISH" | "NEUTRAL">("NEUTRAL");
+  const [priceError, setPriceError] = useState<string | null>(null);
 
-  // Initialize price data
+  // Fetch and update price data in real-time
   useEffect(() => {
-    const initialData = updatePriceData([], 1.0850);
-    setPriceData(initialData);
+    let isMounted = true;
+
+    const refreshPrice = async () => {
+      try {
+        const latest = await fetchLatestPrice("EUR", "USD");
+        if (!isMounted) return;
+
+        setPriceError(null);
+        setCurrentPrice(latest);
+        setPriceData((prev) => updatePriceData(prev, latest, new Date()));
+      } catch (error) {
+        if (!isMounted) return;
+        console.error("Failed to fetch latest price", error);
+        setPriceError(error instanceof Error ? error.message : "Unable to load price data");
+      }
+    };
+
+    refreshPrice();
+    const interval = setInterval(refreshPrice, 15000);
+
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
   }, []);
-
-  // Update price data in real-time
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setPriceData((prev) => {
-        const newData = updatePriceData(prev, currentPrice);
-        const latestPrice = newData[newData.length - 1].close;
-        setCurrentPrice(latestPrice);
-        return newData;
-      });
-    }, 2000);
-
-    return () => clearInterval(interval);
-  }, [currentPrice]);
 
   // Generate signals based on selected strategies
   useEffect(() => {
+    if (currentPrice === null) return;
+
     const interval = setInterval(() => {
       if (selectedStrategies.length === 0) return;
 
@@ -59,6 +71,8 @@ export function ForexStrategyRunner() {
 
   // Update signal statuses based on price movement
   useEffect(() => {
+    if (currentPrice === null) return;
+
     setSignals((prevSignals) =>
       prevSignals.map((signal) => {
         if (signal.status !== "OPEN") return signal;
@@ -131,7 +145,10 @@ export function ForexStrategyRunner() {
           </div>
           <div className="text-right">
             <div className="text-muted-foreground">EUR/USD</div>
-            <div className="text-2xl">{currentPrice.toFixed(5)}</div>
+            <div className="text-2xl">
+              {currentPrice !== null ? currentPrice.toFixed(5) : "Loading..."}
+            </div>
+            {priceError && <p className="text-xs text-destructive">{priceError}</p>}
           </div>
         </div>
 
@@ -150,23 +167,22 @@ export function ForexStrategyRunner() {
 
           {/* Center - Chart and Signals */}
           <div className="lg:col-span-6 space-y-4">
-            <PriceChart 
-              data={priceData} 
-              signals={signals.filter(s => s.status === "OPEN")}
+            <PriceChart
+              data={priceData}
+              signals={signals.filter((s) => s.status === "OPEN")}
               currentPrice={currentPrice}
             />
-            
-            {currentSignal && (
+
+            {currentSignal && currentPrice !== null && (
               <CurrentSignal signal={currentSignal} currentPrice={currentPrice} />
             )}
           </div>
 
           {/* Right Sidebar - Prediction */}
           <div className="lg:col-span-3">
-            <PredictionPanel 
-              prediction={prediction} 
+            <PredictionPanel
+              prediction={prediction}
               signals={signals}
-              currentPrice={currentPrice}
             />
           </div>
         </div>

@@ -73,30 +73,24 @@ export function generateSignal(strategy: Strategy, currentPrice: number): Signal
 
 export function updatePriceData(
   currentData: PricePoint[],
-  lastPrice: number
+  latestPrice: number,
+  timestamp: Date = new Date()
 ): PricePoint[] {
-  const now = new Date();
-  const timeStr = now.toLocaleTimeString();
+  const previousPoint = currentData[currentData.length - 1];
+  const open = previousPoint ? previousPoint.close : latestPrice;
+  const high = previousPoint ? Math.max(previousPoint.close, latestPrice) : latestPrice;
+  const low = previousPoint ? Math.min(previousPoint.close, latestPrice) : latestPrice;
 
-  // Random price movement
-  const change = (Math.random() - 0.5) * 0.0002;
-  const newPrice = lastPrice + change;
-
-  const open = currentData.length > 0 ? currentData[currentData.length - 1].close : newPrice;
-  const high = Math.max(open, newPrice) + Math.random() * 0.0001;
-  const low = Math.min(open, newPrice) - Math.random() * 0.0001;
+  const rounded = (value: number) => parseFloat(value.toFixed(5));
 
   const newPoint: PricePoint = {
-    time: timeStr,
-    price: parseFloat(newPrice.toFixed(5)),
-    open: parseFloat(open.toFixed(5)),
-    high: parseFloat(high.toFixed(5)),
-    low: parseFloat(low.toFixed(5)),
-    close: parseFloat(newPrice.toFixed(5)),
+    time: timestamp.toLocaleTimeString(),
+    price: rounded(latestPrice),
+    open: rounded(open),
+    high: rounded(Math.max(high, latestPrice)),
+    low: rounded(Math.min(low, latestPrice)),
+    close: rounded(latestPrice),
   };
 
-  const newData = [...currentData, newPoint];
-  
-  // Keep last 50 points
-  return newData.slice(-50);
+  return [...currentData.slice(-49), newPoint];
 }

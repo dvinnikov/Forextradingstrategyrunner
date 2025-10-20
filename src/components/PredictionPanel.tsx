@@ -6,7 +6,6 @@ import type { Signal } from "../types/trading";
 interface PredictionPanelProps {
   prediction: "BULLISH" | "BEARISH" | "NEUTRAL";
   signals: Signal[];
-  currentPrice: number;
 }
 
 export function PredictionPanel({ prediction, signals }: PredictionPanelProps) {

@@ -5,7 +5,7 @@ import type { PricePoint, Signal } from "../types/trading";
 interface PriceChartProps {
   data: PricePoint[];
   signals: Signal[];
-  currentPrice: number;
+  currentPrice: number | null;
 }
 
 export function PriceChart({ data, signals, currentPrice }: PriceChartProps) {
@@ -18,94 +18,102 @@ export function PriceChart({ data, signals, currentPrice }: PriceChartProps) {
         </div>
 
         <div className="h-[400px]">
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={data}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-              <XAxis
-                dataKey="time"
-                stroke="var(--muted-foreground)"
-                fontSize={12}
-                tickLine={false}
-              />
-              <YAxis
-                domain={['auto', 'auto']}
-                stroke="var(--muted-foreground)"
-                fontSize={12}
-                tickLine={false}
-                tickFormatter={(value) => value.toFixed(5)}
-              />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: 'var(--popover)',
-                  border: '1px solid var(--border)',
-                  borderRadius: '8px',
-                }}
-                labelStyle={{ color: 'var(--foreground)' }}
-                formatter={(value: number) => value.toFixed(5)}
-              />
-              <Line
-                type="monotone"
-                dataKey="price"
-                stroke="#3b82f6"
-                strokeWidth={2}
-                dot={false}
-              />
-              
-              {/* Current price line */}
-              <ReferenceLine
-                y={currentPrice}
-                stroke="var(--foreground)"
-                strokeDasharray="3 3"
-                label={{
-                  value: `Current: ${currentPrice.toFixed(5)}`,
-                  position: 'right',
-                  fill: 'var(--foreground)',
-                  fontSize: 12,
-                }}
-              />
+          {data.length === 0 ? (
+            <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+              Waiting for live price data...
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={data}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                <XAxis
+                  dataKey="time"
+                  stroke="var(--muted-foreground)"
+                  fontSize={12}
+                  tickLine={false}
+                />
+                <YAxis
+                  domain={['auto', 'auto']}
+                  stroke="var(--muted-foreground)"
+                  fontSize={12}
+                  tickLine={false}
+                  tickFormatter={(value) => value.toFixed(5)}
+                />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: 'var(--popover)',
+                    border: '1px solid var(--border)',
+                    borderRadius: '8px',
+                  }}
+                  labelStyle={{ color: 'var(--foreground)' }}
+                  formatter={(value: number) => value.toFixed(5)}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="price"
+                  stroke="#3b82f6"
+                  strokeWidth={2}
+                  dot={false}
+                />
 
-              {/* Target and Stop lines for open signals */}
-              {signals.map((signal) => (
-                <g key={signal.id}>
+                {/* Current price line */}
+                {currentPrice !== null && (
                   <ReferenceLine
-                    y={signal.target}
-                    stroke="#10b981"
-                    strokeDasharray="5 5"
-                    strokeWidth={2}
+                    y={currentPrice}
+                    stroke="var(--foreground)"
+                    strokeDasharray="3 3"
                     label={{
-                      value: `T: ${signal.target.toFixed(5)}`,
+                      value: `Current: ${currentPrice.toFixed(5)}`,
                       position: 'right',
-                      fill: '#10b981',
-                      fontSize: 11,
+                      fill: 'var(--foreground)',
+                      fontSize: 12,
                     }}
                   />
-                  <ReferenceLine
-                    y={signal.stop}
-                    stroke="#ef4444"
-                    strokeDasharray="5 5"
-                    strokeWidth={2}
-                    label={{
-                      value: `S: ${signal.stop.toFixed(5)}`,
-                      position: 'right',
-                      fill: '#ef4444',
-                      fontSize: 11,
-                    }}
-                  />
-                  <ReferenceLine
-                    y={signal.entry}
-                    stroke={signal.side === "BUY" ? "#3b82f6" : "#f59e0b"}
-                    strokeWidth={1}
-                    label={{
-                      value: `Entry: ${signal.entry.toFixed(5)}`,
-                      position: 'left',
-                      fill: 'var(--muted-foreground)',
-                      fontSize: 10,
-                    }}
-                  />
-                </g>
-              ))}
-            </LineChart>
-          </ResponsiveContainer>
+                )}
+
+                {/* Target and Stop lines for open signals */}
+                {signals.map((signal) => (
+                  <g key={signal.id}>
+                    <ReferenceLine
+                      y={signal.target}
+                      stroke="#10b981"
+                      strokeDasharray="5 5"
+                      strokeWidth={2}
+                      label={{
+                        value: `T: ${signal.target.toFixed(5)}`,
+                        position: 'right',
+                        fill: '#10b981',
+                        fontSize: 11,
+                      }}
+                    />
+                    <ReferenceLine
+                      y={signal.stop}
+                      stroke="#ef4444"
+                      strokeDasharray="5 5"
+                      strokeWidth={2}
+                      label={{
+                        value: `S: ${signal.stop.toFixed(5)}`,
+                        position: 'right',
+                        fill: '#ef4444',
+                        fontSize: 11,
+                      }}
+                    />
+                    <ReferenceLine
+                      y={signal.entry}
+                      stroke={signal.side === "BUY" ? "#3b82f6" : "#f59e0b"}
+                      strokeWidth={1}
+                      label={{
+                        value: `Entry: ${signal.entry.toFixed(5)}`,
+                        position: 'left',
+                        fill: 'var(--muted-foreground)',
+                        fontSize: 10,
+                      }}
+                    />
+                  </g>
+                ))}
+              </LineChart>
+            </ResponsiveContainer>
+          )}
         </div>
 
         <div className="flex items-center gap-4 text-sm flex-wrap">
