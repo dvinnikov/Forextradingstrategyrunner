@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Card } from "./ui/card";
 import type { PricePoint, Signal } from "../types/trading";
 
@@ -21,17 +21,40 @@ export function PriceChart({ data, signals, currentPrice }: PriceChartProps) {
   const widgetContainerIdRef = useRef(
     `tradingview_${Math.random().toString(36).slice(2)}`,
   );
+  const [theme, setTheme] = useState<"dark" | "light">("light");
+
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+
+    const getTheme = () =>
+      document.documentElement.classList.contains("dark") ? "dark" : "light";
+
+    const applyTheme = () => {
+      const nextTheme = getTheme();
+      setTheme((current) => (current === nextTheme ? current : nextTheme));
+    };
+
+    applyTheme();
+
+    const observer = new MutationObserver(applyTheme);
+
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["class"],
+    });
+
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     const container = chartContainerRef.current;
     if (!container) return;
 
-    container.innerHTML = "";
     const widgetContainer = document.createElement("div");
     widgetContainer.id = widgetContainerIdRef.current;
     widgetContainer.style.height = "100%";
     widgetContainer.style.width = "100%";
-    container.appendChild(widgetContainer);
+    container.replaceChildren(widgetContainer);
 
     const createWidget = () => {
       if (!window.TradingView?.widget) return;
@@ -41,9 +64,7 @@ export function PriceChart({ data, signals, currentPrice }: PriceChartProps) {
         symbol: "OANDA:EURUSD",
         interval: "30",
         timezone: "Etc/UTC",
-        theme: document.documentElement.classList.contains("dark")
-          ? "dark"
-          : "light",
+        theme,
         style: "1",
         locale: "en",
         container_id: widgetContainerIdRef.current,
@@ -59,29 +80,31 @@ export function PriceChart({ data, signals, currentPrice }: PriceChartProps) {
 
     if (window.TradingView?.widget) {
       createWidget();
-    } else {
-      if (!script) {
-        script = document.createElement("script");
-        script.id = scriptId;
-        script.src = "https://s3.tradingview.com/tv.js";
-        script.type = "text/javascript";
-        script.async = true;
-        document.head.appendChild(script);
-      }
-
-      const handleLoad = () => createWidget();
-      script.addEventListener("load", handleLoad, { once: true });
-
       return () => {
-        script?.removeEventListener("load", handleLoad);
-        container.innerHTML = "";
+        container.replaceChildren();
       };
     }
 
-    return () => {
-      container.innerHTML = "";
+    if (!script) {
+      script = document.createElement("script");
+      script.id = scriptId;
+      script.src = "https://s3.tradingview.com/tv.js";
+      script.type = "text/javascript";
+      script.async = true;
+      document.head.appendChild(script);
+    }
+
+    const handleLoad = () => {
+      createWidget();
     };
-  }, []);
+
+    script.addEventListener("load", handleLoad, { once: true });
+
+    return () => {
+      script?.removeEventListener("load", handleLoad);
+      container.replaceChildren();
+    };
+  }, [theme]);
 
   const lastPoint = data[data.length - 1];
 
