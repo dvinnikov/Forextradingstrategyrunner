@@ -1,6 +1,14 @@
+import { useEffect, useRef, useState } from "react";
 import { Card } from "./ui/card";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts";
 import type { PricePoint, Signal } from "../types/trading";
+
+declare global {
+  interface Window {
+    TradingView?: {
+      widget?: (config: Record<string, unknown>) => void;
+    };
+  }
+}
 
 interface PriceChartProps {
   data: PricePoint[];
@@ -9,122 +17,171 @@ interface PriceChartProps {
 }
 
 export function PriceChart({ data, signals, currentPrice }: PriceChartProps) {
+  const chartContainerRef = useRef<HTMLDivElement>(null);
+  const widgetContainerIdRef = useRef(
+    `tradingview_${Math.random().toString(36).slice(2)}`,
+  );
+  const [theme, setTheme] = useState<"dark" | "light">("light");
+
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+
+    const getTheme = () =>
+      document.documentElement.classList.contains("dark") ? "dark" : "light";
+
+    const applyTheme = () => {
+      const nextTheme = getTheme();
+      setTheme((current) => (current === nextTheme ? current : nextTheme));
+    };
+
+    applyTheme();
+
+    const observer = new MutationObserver(applyTheme);
+
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["class"],
+    });
+
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    const container = chartContainerRef.current;
+    if (!container) return;
+
+    const widgetContainer = document.createElement("div");
+    widgetContainer.id = widgetContainerIdRef.current;
+    widgetContainer.style.height = "100%";
+    widgetContainer.style.width = "100%";
+    container.replaceChildren(widgetContainer);
+
+    const createWidget = () => {
+      if (!window.TradingView?.widget) return;
+
+      window.TradingView.widget({
+        autosize: true,
+        symbol: "OANDA:EURUSD",
+        interval: "30",
+        timezone: "Etc/UTC",
+        theme,
+        style: "1",
+        locale: "en",
+        container_id: widgetContainerIdRef.current,
+        allow_symbol_change: false,
+        hide_side_toolbar: false,
+        hide_top_toolbar: false,
+        backgroundColor: "transparent",
+      });
+    };
+
+    const scriptId = "tradingview-widget-script";
+    let script = document.getElementById(scriptId) as HTMLScriptElement | null;
+
+    if (window.TradingView?.widget) {
+      createWidget();
+      return () => {
+        container.replaceChildren();
+      };
+    }
+
+    if (!script) {
+      script = document.createElement("script");
+      script.id = scriptId;
+      script.src = "https://s3.tradingview.com/tv.js";
+      script.type = "text/javascript";
+      script.async = true;
+      document.head.appendChild(script);
+    }
+
+    const handleLoad = () => {
+      createWidget();
+    };
+
+    script.addEventListener("load", handleLoad, { once: true });
+
+    return () => {
+      script?.removeEventListener("load", handleLoad);
+      container.replaceChildren();
+    };
+  }, [theme]);
+
+  const lastPoint = data[data.length - 1];
+
   return (
     <Card className="p-4">
       <div className="space-y-4">
         <div>
           <h3>EUR/USD Price Chart</h3>
-          <p className="text-muted-foreground text-sm">Real-time price movement with targets</p>
+          <p className="text-muted-foreground text-sm">
+            Streaming data provided by TradingView
+          </p>
+          {lastPoint && (
+            <p className="text-muted-foreground text-xs mt-1">
+              Last update: {lastPoint.time}
+            </p>
+          )}
         </div>
 
-        <div className="h-[400px]">
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={data}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-              <XAxis
-                dataKey="time"
-                stroke="var(--muted-foreground)"
-                fontSize={12}
-                tickLine={false}
-              />
-              <YAxis
-                domain={['auto', 'auto']}
-                stroke="var(--muted-foreground)"
-                fontSize={12}
-                tickLine={false}
-                tickFormatter={(value) => value.toFixed(5)}
-              />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: 'var(--popover)',
-                  border: '1px solid var(--border)',
-                  borderRadius: '8px',
-                }}
-                labelStyle={{ color: 'var(--foreground)' }}
-                formatter={(value: number) => value.toFixed(5)}
-              />
-              <Line
-                type="monotone"
-                dataKey="price"
-                stroke="#3b82f6"
-                strokeWidth={2}
-                dot={false}
-              />
-              
-              {/* Current price line */}
-              <ReferenceLine
-                y={currentPrice}
-                stroke="var(--foreground)"
-                strokeDasharray="3 3"
-                label={{
-                  value: `Current: ${currentPrice.toFixed(5)}`,
-                  position: 'right',
-                  fill: 'var(--foreground)',
-                  fontSize: 12,
-                }}
-              />
+        <div className="h-[400px]" ref={chartContainerRef} />
 
-              {/* Target and Stop lines for open signals */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-muted-foreground">Current price</span>
+            <span className="font-medium">{currentPrice.toFixed(5)}</span>
+          </div>
+          {signals.length > 0 ? (
+            <div className="grid gap-2 md:grid-cols-2">
               {signals.map((signal) => (
-                <g key={signal.id}>
-                  <ReferenceLine
-                    y={signal.target}
-                    stroke="#10b981"
-                    strokeDasharray="5 5"
-                    strokeWidth={2}
-                    label={{
-                      value: `T: ${signal.target.toFixed(5)}`,
-                      position: 'right',
-                      fill: '#10b981',
-                      fontSize: 11,
-                    }}
-                  />
-                  <ReferenceLine
-                    y={signal.stop}
-                    stroke="#ef4444"
-                    strokeDasharray="5 5"
-                    strokeWidth={2}
-                    label={{
-                      value: `S: ${signal.stop.toFixed(5)}`,
-                      position: 'right',
-                      fill: '#ef4444',
-                      fontSize: 11,
-                    }}
-                  />
-                  <ReferenceLine
-                    y={signal.entry}
-                    stroke={signal.side === "BUY" ? "#3b82f6" : "#f59e0b"}
-                    strokeWidth={1}
-                    label={{
-                      value: `Entry: ${signal.entry.toFixed(5)}`,
-                      position: 'left',
-                      fill: 'var(--muted-foreground)',
-                      fontSize: 10,
-                    }}
-                  />
-                </g>
+                <div
+                  key={signal.id}
+                  className="rounded-lg border border-border/60 p-3 space-y-2"
+                >
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium">{signal.strategy}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {signal.side} · {signal.time}
+                      </p>
+                    </div>
+                    <span
+                      className={`text-xs font-semibold ${
+                        signal.side === "BUY"
+                          ? "text-emerald-500"
+                          : "text-amber-500"
+                      }`}
+                    >
+                      {signal.side}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 text-xs">
+                    <div>
+                      <p className="text-muted-foreground">Entry</p>
+                      <p className="font-medium">
+                        {signal.entry.toFixed(5)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Target</p>
+                      <p className="font-medium text-emerald-500">
+                        {signal.target.toFixed(5)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Stop</p>
+                      <p className="font-medium text-rose-500">
+                        {signal.stop.toFixed(5)}
+                      </p>
+                    </div>
+                  </div>
+                </div>
               ))}
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-
-        <div className="flex items-center gap-4 text-sm flex-wrap">
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-0.5 bg-[#10b981]" />
-            <span className="text-muted-foreground">Target</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-0.5 bg-[#ef4444]" />
-            <span className="text-muted-foreground">Stop Loss</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-0.5 bg-[#3b82f6]" />
-            <span className="text-muted-foreground">Buy Entry</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-0.5 bg-[#f59e0b]" />
-            <span className="text-muted-foreground">Sell Entry</span>
-          </div>
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              No open signal levels to display.
+            </p>
+          )}
         </div>
       </div>
     </Card>
